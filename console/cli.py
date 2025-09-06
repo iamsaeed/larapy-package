@@ -42,21 +42,52 @@ def serve(host: str, port: int, reload: bool, debug: bool):
     if debug:
         click.echo("Debug mode enabled")
     
-    # In a full implementation, this would start uvicorn
+    # Start Flask development server
     try:
-        import uvicorn
-        uvicorn.run(
-            "bootstrap.app:app",  # Application import string
+        import importlib.util
+        import os
+        from pathlib import Path
+        
+        # Try to find and import the Flask app
+        app_paths = [
+            "bootstrap/app.py",
+            "public/index.py",
+            "app.py"
+        ]
+        
+        app_instance = None
+        for app_path in app_paths:
+            if os.path.exists(app_path):
+                spec = importlib.util.spec_from_file_location("app", app_path)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    
+                    # Look for Flask app instance
+                    if hasattr(module, 'app'):
+                        app_instance = module.app
+                        break
+                    elif hasattr(module, 'create_application'):
+                        app_instance = module.create_application()
+                        break
+        
+        if app_instance is None:
+            click.echo("Error: No Flask application found. Make sure you have a Flask app in bootstrap/app.py or public/index.py")
+            sys.exit(1)
+        
+        # Run Flask development server
+        app_instance.run(
             host=host,
             port=port,
-            reload=reload,
-            log_level="debug" if debug else "info"
+            debug=debug,
+            use_reloader=reload
         )
-    except ImportError:
-        click.echo("Error: uvicorn not installed. Install with: pip install uvicorn")
+        
+    except ImportError as e:
+        click.echo(f"Error: Missing dependency - {e}. Install with: pip install flask")
         sys.exit(1)
-    except FileNotFoundError:
-        click.echo("Error: No application found. Make sure you have an app.py file.")
+    except Exception as e:
+        click.echo(f"Error starting server: {e}")
         sys.exit(1)
 
 

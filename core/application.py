@@ -299,15 +299,88 @@ class Application(Container):
         Args:
             host: The host to bind to
             port: The port to bind to
-            **kwargs: Additional arguments for uvicorn
+            **kwargs: Additional arguments for Flask development server
         """
         # Boot the application
         self.boot()
         
-        # For now, this is a placeholder
-        # In a full implementation, this would start uvicorn
+        # Create Flask app if not already done
+        if not hasattr(self, '_flask_app'):
+            self._flask_app = self._create_flask_app()
+        
+        # Run Flask development server
+        debug = kwargs.get('debug', self.is_local())
+        use_reloader = kwargs.get('reload', self.is_local())
+        
         print(f"Larapy application starting on {host}:{port}")
-        print("This is a development implementation.")
+        print(f"Environment: {self.environment}")
+        print(f"Debug mode: {'enabled' if debug else 'disabled'}")
+        
+        self._flask_app.run(
+            host=host,
+            port=port,
+            debug=debug,
+            use_reloader=use_reloader,
+            **kwargs
+        )
+    
+    def _create_flask_app(self):
+        """
+        Create and configure a Flask application instance.
+        
+        Returns:
+            Flask application instance
+        """
+        try:
+            from flask import Flask, render_template
+            
+            # Create Flask app
+            flask_app = Flask(
+                __name__,
+                template_folder=str(self._base_path / 'resources' / 'views'),
+                static_folder=str(self._base_path / 'public')
+            )
+            
+            # Configure Flask app
+            flask_app.config.update({
+                'SECRET_KEY': self.get_config('app.APP_KEY', 'larapy-default-key'),
+                'DEBUG': self.is_local()
+            })
+            
+            # Set up basic routes (placeholder)
+            @flask_app.route('/')
+            def home():
+                try:
+                    return render_template('home.html', 
+                        title='Welcome to Larapy',
+                        message="Laravel's elegant syntax meets Python's simplicity"
+                    )
+                except:
+                    return """
+                    <h1>Welcome to Larapy!</h1>
+                    <p>Laravel's elegant syntax meets Python's simplicity</p>
+                    <p>Your Larapy application is running successfully.</p>
+                    """
+            
+            @flask_app.route('/health')
+            def health():
+                return {'status': 'healthy', 'version': self.version()}
+            
+            return flask_app
+            
+        except ImportError:
+            raise RuntimeError("Flask not installed. Install with: pip install flask")
+        
+    def get_flask_app(self):
+        """
+        Get the Flask application instance.
+        
+        Returns:
+            Flask application instance
+        """
+        if not hasattr(self, '_flask_app'):
+            self._flask_app = self._create_flask_app()
+        return self._flask_app
     
     def version(self) -> str:
         """
