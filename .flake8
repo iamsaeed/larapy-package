@@ -1,0 +1,46 @@
+[flake8]
+# PEP 8 compliance configuration for Larapy
+max-line-length = 88
+max-complexity = 10
+select = E,W,F,C
+ignore = 
+    # E203: whitespace before ':' (conflicts with black)
+    E203,
+    # W503: line break before binary operator (conflicts with black)
+    W503,
+    # E501: line too long (handled by max-line-length)
+    E501
+
+# Exclude directories
+exclude = 
+    .git,
+    __pycache__,
+    build,
+    dist,
+    *.egg-info,
+    venv,
+    .venv,
+    .tox,
+    .pytest_cache
+
+# File patterns to include
+filename = *.py
+
+# Show source code for errors
+show-source = True
+
+# Count errors and warnings
+count = True
+
+# Print total number of errors/warnings to stderr
+statistics = True
+
+# Enable specific error codes
+enable-extensions = C90
+
+# Per-file ignores
+per-file-ignores =
+    # Ignore import order in __init__.py files
+    __init__.py:F401,E402
+    # Ignore line length in CLI help text
+    console/cli.py:E501
