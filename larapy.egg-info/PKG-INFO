@@ -1,0 +1,132 @@
+Metadata-Version: 2.4
+Name: larapy
+Version: 0.2.0
+Summary: A Python framework inspired by Laravel
+Author-email: Larapy Team <team@larapy.dev>
+Maintainer-email: Larapy Team <team@larapy.dev>
+License: MIT
+Project-URL: Homepage, https://github.com/yourusername/larapy-package
+Project-URL: Documentation, https://github.com/yourusername/larapy-package#readme
+Project-URL: Repository, https://github.com/yourusername/larapy-package.git
+Project-URL: Bug Tracker, https://github.com/yourusername/larapy-package/issues
+Keywords: web,framework,laravel,python,mvc
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: click>=8.0.0
+Requires-Dist: typing-extensions>=4.0.0; python_version < "3.10"
+Provides-Extra: dev
+Requires-Dist: pytest>=6.0; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: flake8; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: pre-commit; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: sphinx; extra == "docs"
+Requires-Dist: sphinx-rtd-theme; extra == "docs"
+
+# Larapy
+
+A Python framework inspired by Laravel, providing Laravel-like functionality for Python web development, including dependency injection, routing, HTTP handling, database ORM, authentication, middleware, and more.
+
+## Features
+
+- 🚀 **Fast & Modern**: Built with modern Python features and best practices
+- 🛣️ **Laravel-inspired Routing**: Familiar routing syntax and functionality
+- 🏗️ **Dependency Injection**: Powerful IoC container for service management
+- 📊 **Database ORM**: Eloquent-like ORM for database interactions
+- 🔐 **Authentication**: Built-in authentication system
+- 🔧 **Middleware**: Request/response middleware pipeline
+- 🎨 **View Engine**: Flexible template rendering system
+- ⚡ **CLI Tools**: Artisan-like command line interface
+
+## Installation
+
+### Install from GitHub
+
+```bash
+pip install git+https://github.com/yourusername/larapy-package.git
+```
+
+### Development Installation
+
+```bash
+git clone https://github.com/yourusername/larapy-package.git
+cd larapy-package
+pip install -e .
+```
+
+## Quick Start
+
+```python
+from larapy import Application, Route, Request, Response
+
+# Create application
+app = Application()
+
+# Define routes
+@Route.get('/')
+def home(request: Request) -> Response:
+    return Response("Hello, Larapy!")
+
+# Run the application
+if __name__ == '__main__':
+    app.run()
+```
+
+## CLI Usage
+
+Larapy comes with a powerful CLI tool for development:
+
+```bash
+# Start development server
+larapy serve
+
+# Generate code
+larapy make:controller UserController
+larapy make:model User --migration
+larapy make:middleware AuthMiddleware
+
+# Database management
+larapy db:migrate
+larapy db:seed
+larapy db:rollback
+
+# Environment management
+larapy env:status
+larapy env:init production
+
+# Configuration
+larapy config:show
+larapy config:publish auth
+```
+
+## Requirements
+
+- Python 3.8+
+- click >= 8.0.0
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Documentation
+
+For full documentation, visit our [documentation site](https://github.com/yourusername/larapy-package#readme).
