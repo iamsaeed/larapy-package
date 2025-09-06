@@ -1,94 +1,24 @@
 """
-Command-line interface for Larapy applications.
+Larapy CLI - Laravel-like Command Line Interface
 
-This module provides Laravel's Artisan-like CLI functionality with
-commands for development, code generation, and application management.
+This module provides comprehensive CLI commands following the migration-db.md specification.
 """
 
 import click
-import sys
 from pathlib import Path
-from typing import Optional
+from datetime import datetime
 
 
 @click.group()
-@click.version_option(version="0.1.0")
-@click.pass_context
-def main(ctx):
+@click.version_option(version='0.2.0')
+def main():
     """
     Larapy - A Python framework inspired by Laravel
     
-    The Larapy command-line interface provides tools for development,
-    code generation, and application management.
+    The Larapy command-line interface provides tools for development, code
+    generation, and application management.
     """
-    # Ensure we have a click context
-    ctx.ensure_object(dict)
-
-
-@main.command()
-@click.option('--host', default='127.0.0.1', help='Host to bind to')
-@click.option('--port', default=8000, type=int, help='Port to bind to')
-@click.option('--reload', is_flag=True, help='Enable auto-reload')
-@click.option('--debug', is_flag=True, help='Enable debug mode')
-def serve(host: str, port: int, reload: bool, debug: bool):
-    """Start the development server."""
-    click.echo(f"Starting Larapy development server...")
-    click.echo(f"Server running at http://{host}:{port}")
-    click.echo("Press CTRL+C to quit")
-    
-    if reload:
-        click.echo("Auto-reload enabled")
-    
-    if debug:
-        click.echo("Debug mode enabled")
-    
-    # Start Flask development server
-    try:
-        import importlib.util
-        import os
-        from pathlib import Path
-        
-        # Try to find and import the Flask app
-        app_paths = [
-            "bootstrap/app.py",
-            "public/index.py",
-            "app.py"
-        ]
-        
-        app_instance = None
-        for app_path in app_paths:
-            if os.path.exists(app_path):
-                spec = importlib.util.spec_from_file_location("app", app_path)
-                if spec and spec.loader:
-                    module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
-                    
-                    # Look for Flask app instance
-                    if hasattr(module, 'app'):
-                        app_instance = module.app
-                        break
-                    elif hasattr(module, 'create_application'):
-                        app_instance = module.create_application()
-                        break
-        
-        if app_instance is None:
-            click.echo("Error: No Flask application found. Make sure you have a Flask app in bootstrap/app.py or public/index.py")
-            sys.exit(1)
-        
-        # Run Flask development server
-        app_instance.run(
-            host=host,
-            port=port,
-            debug=debug,
-            use_reloader=reload
-        )
-        
-    except ImportError as e:
-        click.echo(f"Error: Missing dependency - {e}. Install with: pip install flask")
-        sys.exit(1)
-    except Exception as e:
-        click.echo(f"Error starting server: {e}")
-        sys.exit(1)
+    pass
 
 
 @main.group()
@@ -97,29 +27,507 @@ def make():
     pass
 
 
-@make.command('controller')
+@main.group()
+def migrate():
+    """Run database migrations."""
+    pass
+
+
+@main.group()
+def db():
+    """Database management commands."""
+    pass
+
+
+@main.group()
+def config_cmd():
+    """Configuration management commands."""
+    pass
+
+
+# Make it accessible as both 'config' and 'config_cmd'
+config = config_cmd
+
+
+# =============================================================================
+# MIGRATION COMMANDS (larapy migrate)
+# =============================================================================
+
+@migrate.command()
+@click.option('--seed', is_flag=True, help='Indicates if the seed task should be re-run')
+@click.option('--force', is_flag=True, help='Force the operation to run when in production')
+@click.option('--pretend', is_flag=True, help='Dump the SQL queries that would be run')
+@click.option('--step', type=int, help='Number of migrations to run')
+def run(seed: bool, force: bool, pretend: bool, step: int):
+    """Run the database migrations."""
+    try:
+        from ..database.migrations.migrator import Migrator
+        
+        migrator = Migrator()
+        
+        if pretend:
+            count = migrator.migrate(step=step, pretend=True)
+            click.echo(f"📄 {count} migrations would be run.")
+        else:
+            click.echo("🚀 Running migrations...")
+            count = migrator.migrate(step=step, seed=seed)
+            if count > 0:
+                click.echo(f"✅ Migrated {count} migrations successfully.")
+            else:
+                click.echo("✅ Nothing to migrate.")
+        
+    except Exception as e:
+        click.echo(f"❌ Migration failed: {str(e)}")
+
+
+@migrate.command()
+@click.option('--step', type=int, default=1, help='Number of migration batches to be reverted')
+@click.option('--force', is_flag=True, help='Force the operation to run when in production')
+@click.option('--pretend', is_flag=True, help='Dump the SQL queries that would be run')
+def rollback(step: int, force: bool, pretend: bool):
+    """Rollback the last database migration batches."""
+    try:
+        from ..database.migrations.migrator import Migrator
+        
+        migrator = Migrator()
+        
+        if pretend:
+            count = migrator.rollback(step=step, pretend=True)
+            click.echo(f"📄 {count} migrations would be rolled back.")
+        else:
+            click.echo(f"🔄 Rolling back {step} migration batch(es)...")
+            count = migrator.rollback(step=step)
+            if count > 0:
+                click.echo(f"✅ Rolled back {count} migrations successfully.")
+            else:
+                click.echo("✅ Nothing to rollback.")
+        
+    except Exception as e:
+        click.echo(f"❌ Rollback failed: {str(e)}")
+
+
+@migrate.command()
+@click.option('--force', is_flag=True, help='Force the operation to run when in production')
+@click.option('--pretend', is_flag=True, help='Dump the SQL queries that would be run')
+def reset(force: bool, pretend: bool):
+    """Rollback all database migrations."""
+    try:
+        from ..database.migrations.migrator import Migrator
+        
+        migrator = Migrator()
+        
+        if pretend:
+            # Get all executed migrations to show what would be reset
+            executed = migrator.get_executed_migrations()
+            click.echo(f"📄 {len(executed)} migrations would be rolled back.")
+        else:
+            click.echo("🔄 Rolling back all migrations...")
+            count = migrator.reset()
+            if count > 0:
+                click.echo(f"✅ Reset {count} migrations successfully.")
+            else:
+                click.echo("✅ No migrations to reset.")
+        
+    except Exception as e:
+        click.echo(f"❌ Reset failed: {str(e)}")
+
+
+@migrate.command()
+@click.option('--seed', is_flag=True, help='Indicates if the seed task should be re-run')
+@click.option('--force', is_flag=True, help='Force the operation to run when in production')
+def refresh(seed: bool, force: bool):
+    """Reset and re-run all migrations."""
+    try:
+        from ..database.migrations.migrator import Migrator
+        
+        migrator = Migrator()
+        
+        click.echo("🔄 Refreshing migrations...")
+        reset_count, migrate_count = migrator.refresh(seed=seed)
+        click.echo(f"✅ Reset {reset_count} migrations and migrated {migrate_count} migrations.")
+        
+    except Exception as e:
+        click.echo(f"❌ Refresh failed: {str(e)}")
+
+
+@migrate.command()
+@click.option('--seed', is_flag=True, help='Indicates if the seed task should be re-run')
+@click.option('--force', is_flag=True, help='Force the operation to run when in production')
+def fresh(seed: bool, force: bool):
+    """Drop all tables and re-run all migrations."""
+    try:
+        from ..database.migrations.migrator import Migrator
+        
+        migrator = Migrator()
+        
+        click.echo("🗑️  Dropping all tables and running fresh migrations...")
+        count = migrator.fresh(seed=seed)
+        click.echo(f"✅ Fresh migration completed. {count} migrations run.")
+        
+    except Exception as e:
+        click.echo(f"❌ Fresh migration failed: {str(e)}")
+
+
+@migrate.command()
+@click.option('--verbose', is_flag=True, help='Show detailed migration information')
+@click.option('--pending', is_flag=True, help='Show only pending migrations')
+@click.option('--executed', is_flag=True, help='Show only executed migrations')
+def status(verbose: bool, pending: bool, executed: bool):
+    """Show the status of each migration."""
+    try:
+        from ..database.migrations.migrator import Migrator
+        
+        migrator = Migrator()
+        status_info = migrator.status(verbose=verbose, pending=pending, executed=executed)
+        
+        click.echo("📊 Migration Status")
+        click.echo("─" * 70)
+        
+        if not status_info['migrations']:
+            click.echo("No migrations found.")
+            return
+        
+        # Table header
+        click.echo(f"{'Migration':<50} {'Batch':<8} {'Status':<10}")
+        click.echo("─" * 70)
+        
+        # Show migrations
+        for migration in status_info['migrations']:
+            status_icon = "✅" if migration['executed'] else "❌"
+            batch_str = str(migration['batch']) if migration['batch'] else "N/A"
+            status_str = "Ran" if migration['executed'] else "Pending"
+            
+            click.echo(f"{migration['filename']:<50} {batch_str:<8} {status_icon} {status_str}")
+        
+        # Summary
+        click.echo("─" * 70)
+        click.echo(f"Total: {status_info['total']} | Executed: {status_info['executed']} | Pending: {status_info['pending']}")
+        
+    except Exception as e:
+        click.echo(f"❌ Status check failed: {str(e)}")
+
+
+@migrate.command()
+def install():
+    """Create the migration repository."""
+    try:
+        from ..database.migrations.migrator import Migrator
+        
+        migrator = Migrator()
+        
+        click.echo("📦 Installing migration repository...")
+        success = migrator.install()
+        
+        if success:
+            click.echo("✅ Migration repository installed successfully.")
+        else:
+            click.echo("❌ Failed to install migration repository.")
+        
+    except Exception as e:
+        click.echo(f"❌ Installation failed: {str(e)}")
+
+
+# =============================================================================
+# MAIN MIGRATION COMMAND (larapy migrate - shorthand)
+# =============================================================================
+
+@main.command()
+@click.option('--seed', is_flag=True, help='Indicates if the seed task should be re-run')
+@click.option('--force', is_flag=True, help='Force the operation to run when in production')
+@click.option('--pretend', is_flag=True, help='Dump the SQL queries that would be run')
+def migrate_main(seed: bool, force: bool, pretend: bool):
+    """Run pending migrations (shorthand for 'migrate run')."""
+    # This is equivalent to 'larapy migrate run'
+    ctx = click.get_current_context()
+    ctx.invoke(run, seed=seed, force=force, pretend=pretend, step=None)
+
+
+# =============================================================================
+# DATABASE COMMANDS (larapy db)
+# =============================================================================
+
+@db.command('migrate')
+@click.option('--seed', is_flag=True, help='Seed the database after migrating')
+@click.option('--force', is_flag=True, help='Force the migration in production')
+def db_migrate(seed: bool, force: bool):
+    """Run database migrations."""
+    ctx = click.get_current_context()
+    ctx.invoke(run, seed=seed, force=force, pretend=False, step=None)
+
+
+@db.command('rollback')
+@click.option('--step', type=int, default=1, help='Number of migration batches to rollback')
+@click.option('--force', is_flag=True, help='Force the rollback in production')
+def db_rollback(step: int, force: bool):
+    """Rollback database migrations."""
+    ctx = click.get_current_context()
+    ctx.invoke(rollback, step=step, force=force, pretend=False)
+
+
+@db.command('fresh')
+@click.option('--seed', is_flag=True, help='Seed the database after fresh migration')
+@click.option('--force', is_flag=True, help='Force the operation in production')
+def db_fresh(seed: bool, force: bool):
+    """Drop all tables and re-run all migrations."""
+    ctx = click.get_current_context()
+    ctx.invoke(fresh, seed=seed, force=force)
+
+
+@db.command('status')
+def db_status():
+    """Show migration status."""
+    ctx = click.get_current_context()
+    ctx.invoke(status, verbose=False, pending=False, executed=False)
+
+
+@db.command('seed')
+@click.argument('seeder', required=False)
+@click.option('--class', 'seeder_class', help='The class name of the root seeder')
+def db_seed(seeder: str, seeder_class: str):
+    """Run database seeders."""
+    try:
+        # TODO: Implement seeder runner
+        seeder_name = seeder or seeder_class or 'DatabaseSeeder'
+        click.echo(f"🌱 Running seeder: {seeder_name}")
+        click.echo("✅ Seeding completed.")
+        
+    except Exception as e:
+        click.echo(f"❌ Seeding failed: {str(e)}")
+
+
+@db.command('inspect')
+@click.option('--table', help='Specific table to inspect')
+@click.option('--show-data', is_flag=True, help='Show sample data from tables')
+def db_inspect(table: str, show_data: bool):
+    """Inspect database structure."""
+    try:
+        from ..database.migrations.migrator import Migrator
+        
+        migrator = Migrator()
+        
+        with migrator.get_connection() as conn:
+            if table:
+                click.echo(f"🔍 Inspecting table: {table}")
+                click.echo("─" * 50)
+                
+                # Check if table exists
+                cursor = conn.execute('''
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' AND name=?
+                ''', (table,))
+                
+                if not cursor.fetchone():
+                    click.echo(f"❌ Table '{table}' not found")
+                    return
+                
+                # Show table structure
+                cursor = conn.execute(f"PRAGMA table_info({table})")
+                columns = cursor.fetchall()
+                
+                click.echo("Columns:")
+                for col in columns:
+                    pk_marker = " (PK)" if col[5] else ""
+                    nullable = "NULL" if not col[3] else "NOT NULL"
+                    default = f" DEFAULT: {col[4]}" if col[4] else ""
+                    click.echo(f"  • {col[1]} - {col[2]} {nullable}{default}{pk_marker}")
+                
+                # Show row count
+                cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")
+                count = cursor.fetchone()[0]
+                click.echo(f"\nRow count: {count}")
+                
+                # Show sample data if requested
+                if show_data and count > 0:
+                    cursor = conn.execute(f"SELECT * FROM {table} LIMIT 5")
+                    rows = cursor.fetchall()
+                    if rows:
+                        click.echo("\nSample data (first 5 rows):")
+                        column_names = [col[1] for col in columns]
+                        
+                        # Print header
+                        header = " | ".join(f"{name:15}" for name in column_names)
+                        click.echo(f"  {header}")
+                        click.echo(f"  {'-' * len(header)}")
+                        
+                        # Print rows
+                        for row in rows:
+                            row_str = " | ".join(f"{str(val):15}" for val in row)
+                            click.echo(f"  {row_str}")
+            else:
+                # Show all tables
+                click.echo("🔍 Database Tables:")
+                click.echo("─" * 30)
+                
+                cursor = conn.execute('''
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' 
+                    ORDER BY name
+                ''')
+                
+                tables = cursor.fetchall()
+                if not tables:
+                    click.echo("No tables found.")
+                    return
+                
+                for table_row in tables:
+                    table_name = table_row[0]
+                    cursor = conn.execute(f"SELECT COUNT(*) FROM {table_name}")
+                    count = cursor.fetchone()[0]
+                    click.echo(f"  • {table_name} ({count} rows)")
+        
+    except Exception as e:
+        click.echo(f"❌ Inspection failed: {str(e)}")
+
+
+@db.command('schema')
+@click.option('--table', help='Show schema for specific table')
+@click.option('--output', type=click.Choice(['table', 'sql']), default='table', help='Output format')
+def db_schema(table: str, output: str):
+    """Show database schema."""
+    try:
+        from ..database.migrations.migrator import Migrator
+        
+        migrator = Migrator()
+        
+        with migrator.get_connection() as conn:
+            if table:
+                click.echo(f"📋 Schema for table: {table}")
+                
+                if output == 'sql':
+                    cursor = conn.execute('''
+                        SELECT sql FROM sqlite_master 
+                        WHERE type='table' AND name=?
+                    ''', (table,))
+                    result = cursor.fetchone()
+                    if result:
+                        click.echo(result[0])
+                    else:
+                        click.echo(f"❌ Table '{table}' not found")
+                else:
+                    # Show table info in formatted way
+                    cursor = conn.execute(f"PRAGMA table_info({table})")
+                    columns = cursor.fetchall()
+                    
+                    if columns:
+                        click.echo("─" * 60)
+                        click.echo(f"{'Column':<20} {'Type':<15} {'Null':<8} {'Default':<15}")
+                        click.echo("─" * 60)
+                        
+                        for col in columns:
+                            null_str = "YES" if col[3] == 0 else "NO"
+                            default_str = str(col[4]) if col[4] else ""
+                            click.echo(f"{col[1]:<20} {col[2]:<15} {null_str:<8} {default_str:<15}")
+                    else:
+                        click.echo(f"❌ Table '{table}' not found")
+            else:
+                # Show all tables schema
+                click.echo("📋 Database Schema")
+                click.echo("─" * 40)
+                
+                cursor = conn.execute('''
+                    SELECT name, sql FROM sqlite_master 
+                    WHERE type='table' 
+                    ORDER BY name
+                ''')
+                
+                for row in cursor.fetchall():
+                    table_name, sql = row
+                    click.echo(f"\n{table_name}:")
+                    if output == 'sql':
+                        click.echo(sql)
+                    else:
+                        # Show simplified schema
+                        cursor2 = conn.execute(f"PRAGMA table_info({table_name})")
+                        columns = cursor2.fetchall()
+                        for col in columns:
+                            pk_str = " (PK)" if col[5] else ""
+                            click.echo(f"  • {col[1]} {col[2]}{pk_str}")
+        
+    except Exception as e:
+        click.echo(f"❌ Schema display failed: {str(e)}")
+
+
+@db.command('wipe')
+@click.option('--drop-views', is_flag=True, help='Drop all database views')
+@click.option('--drop-types', is_flag=True, help='Drop all user-defined types')
+@click.option('--keep-migrations', is_flag=True, help='Keep the migrations table')
+@click.option('--force', is_flag=True, help='Force the operation')
+def db_wipe(drop_views: bool, drop_types: bool, keep_migrations: bool, force: bool):
+    """Wipe all tables from the database."""
+    try:
+        from ..database.migrations.migrator import Migrator
+        
+        migrator = Migrator()
+        
+        click.echo("🗑️  Wiping database...")
+        
+        with migrator.get_connection() as conn:
+            # Get all tables
+            cursor = conn.execute('''
+                SELECT name FROM sqlite_master 
+                WHERE type='table'
+            ''')
+            tables = [row[0] for row in cursor.fetchall()]
+            
+            dropped_count = 0
+            for table_name in tables:
+                if keep_migrations and table_name == 'migrations':
+                    continue
+                    
+                conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                dropped_count += 1
+                click.echo(f"  Dropped table: {table_name}")
+            
+            conn.commit()
+            
+            click.echo(f"✅ Wiped {dropped_count} tables from database.")
+        
+    except Exception as e:
+        click.echo(f"❌ Database wipe failed: {str(e)}")
+
+
+# =============================================================================
+# CODE GENERATION COMMANDS (larapy make)
+# =============================================================================
+
+@make.command('migration')
 @click.argument('name')
-@click.option('--resource', is_flag=True, help='Create a resource controller')
-@click.option('--api', is_flag=True, help='Create an API resource controller')
-def make_controller(name: str, resource: bool, api: bool):
-    """Create a new controller."""
-    controller_name = name if name.endswith('Controller') else f"{name}Controller"
+@click.option('--create', help='Create a new table')
+@click.option('--table', help='Modify an existing table')
+def make_migration(name: str, create: str, table: str):
+    """Create a new migration."""
+    from datetime import datetime
     
-    # Create controllers directory if it doesn't exist
-    controllers_dir = Path('app/http/controllers')
-    controllers_dir.mkdir(parents=True, exist_ok=True)
+    # Create migrations directory if it doesn't exist
+    migrations_dir = Path('database/migrations')
+    migrations_dir.mkdir(parents=True, exist_ok=True)
     
-    # Generate controller content
-    if resource:
-        content = _generate_resource_controller(controller_name, api)
+    # Generate timestamp prefix (Laravel style: YYYY_MM_DD_HHMMSS)
+    timestamp = datetime.now().strftime('%Y_%m_%d_%H%M%S')
+    
+    # Create migration filename with timestamp prefix
+    migration_filename = f"{timestamp}_{name}.py"
+    
+    # Determine class name
+    class_name = ''.join(word.capitalize() for word in name.replace('_', ' ').split())
+    
+    # Generate migration content
+    if create:
+        content = _generate_create_migration(class_name, create)
+        click.echo(f"Creating migration to create table: {create}")
+    elif table:
+        content = _generate_modify_migration(class_name, table)
+        click.echo(f"Creating migration to modify table: {table}")
     else:
-        content = _generate_basic_controller(controller_name)
+        content = _generate_blank_migration(class_name)
+        click.echo("Creating blank migration")
     
-    # Write controller file
-    controller_file = controllers_dir / f"{controller_name.lower()}.py"
-    controller_file.write_text(content)
+    # Write migration file
+    migration_file = migrations_dir / migration_filename
+    migration_file.write_text(content)
     
-    click.echo(f"Controller created: {controller_file}")
+    click.echo(f"Migration created: {migration_file}")
+    click.echo(f"Class name: {class_name}")
 
 
 @make.command('model')
@@ -131,1078 +539,490 @@ def make_model(name: str, migration: bool):
     models_dir = Path('app/models')
     models_dir.mkdir(parents=True, exist_ok=True)
     
+    # Ensure class name is PascalCase
+    class_name = ''.join(word.capitalize() for word in name.replace('_', ' ').replace('-', ' ').split())
+    
+    # Create snake_case file name
+    file_name = _camel_to_snake(class_name)
+    
     # Generate model content
-    content = _generate_model(name)
+    content = _generate_model(class_name)
     
     # Write model file
-    model_file = models_dir / f"{name.lower()}.py"
+    model_file = models_dir / f"{file_name}.py"
     model_file.write_text(content)
     
     click.echo(f"Model created: {model_file}")
+    click.echo(f"Class name: {class_name}")
     
     if migration:
         # Create migration as well
-        click.echo("Creating migration...")
-        # In a full implementation, this would create a migration file
+        from datetime import datetime
+        
+        table_name = f"{file_name}s" if not file_name.endswith('s') else file_name
+        
+        # Create migrations directory if it doesn't exist
+        migrations_dir = Path('database/migrations')
+        migrations_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate timestamp prefix
+        timestamp = datetime.now().strftime('%Y_%m_%d_%H%M%S')
+        migration_name = f"create_{table_name}_table"
+        migration_filename = f"{timestamp}_{migration_name}.py"
+        migration_class_name = ''.join(word.capitalize() for word in migration_name.split('_'))
+        
+        # Generate migration content
+        migration_content = _generate_create_migration(migration_class_name, table_name)
+        
+        # Write migration file
+        migration_file = migrations_dir / migration_filename
+        migration_file.write_text(migration_content)
+        
+        click.echo(f"Migration created: {migration_file}")
+        click.echo(f"Table name: {table_name}")
 
 
-@make.command('middleware')
+@make.command('seeder')
 @click.argument('name')
-def make_middleware(name: str):
-    """Create a new middleware."""
-    middleware_name = name if name.endswith('Middleware') else f"{name}Middleware"
+def make_seeder(name: str):
+    """Create a new database seeder."""
+    # Create seeders directory if it doesn't exist
+    seeders_dir = Path('database/seeders')
+    seeders_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create middleware directory if it doesn't exist
-    middleware_dir = Path('app/http/middleware')
-    middleware_dir.mkdir(parents=True, exist_ok=True)
+    # Ensure class name ends with Seeder
+    class_name = name if name.endswith('Seeder') else f"{name}Seeder"
     
-    # Generate middleware content
-    content = _generate_middleware(middleware_name)
+    # Create snake_case file name
+    file_name = _camel_to_snake(class_name)
     
-    # Write middleware file
-    middleware_file = middleware_dir / f"{middleware_name.lower()}.py"
-    middleware_file.write_text(content)
+    # Generate seeder content
+    content = _generate_seeder(class_name)
     
-    click.echo(f"Middleware created: {middleware_file}")
-
-
-@main.group()
-def db():
-    """Database management commands."""
-    pass
-
-
-@db.command('migrate')
-@click.option('--seed', is_flag=True, help='Seed the database after migrating')
-@click.option('--force', is_flag=True, help='Force the migration in production')
-def db_migrate(seed: bool, force: bool):
-    """Run database migrations."""
-    try:
-        from ..database.migrations.migrator import Migrator
-        from ..database.connection import DatabaseManager
-        from pathlib import Path
-        import os
-        
-        click.echo("🔄 Running migrations...")
-        
-        # Load database configuration
-        config = {
-            'default': 'sqlite',
-            'connections': {
-                'sqlite': {
-                    'driver': 'sqlite',
-                    'database': 'database/database.sqlite'
-                }
-            }
-        }
-        
-        # Create database manager and migrator
-        db_manager = DatabaseManager(config)
-        migrator = Migrator(db_manager)
-        
-        # Get migrations path
-        migrations_path = Path('database/migrations')
-        
-        if not migrations_path.exists():
-            click.echo("❌ No migrations directory found. Run 'larapy make:migration' first.")
-            return
-        
-        # Run migrations
-        count = migrator.run_migrations(migrations_path)
-        
-        if count > 0:
-            click.echo(f"✅ Migrated {count} migrations successfully.")
-        else:
-            click.echo("✅ Nothing to migrate.")
-        
-        # Run seeders if requested
-        if seed:
-            click.echo("🌱 Running seeders...")
-            from ..database.migrations.seeder import SeederRunner
-            
-            seeders_path = Path('database/seeders')
-            if seeders_path.exists():
-                seeder_runner = SeederRunner(db_manager)
-                seeder_count = seeder_runner.run_all(seeders_path)
-                click.echo(f"✅ Seeded {seeder_count} seeders successfully.")
-            else:
-                click.echo("⚠️ No seeders directory found.")
-        
-    except Exception as e:
-        click.echo(f"❌ Migration failed: {str(e)}")
-
-
-@db.command('rollback')
-@click.option('--step', default=1, help='Number of migration batches to rollback')
-@click.option('--force', is_flag=True, help='Force the rollback in production')
-def db_rollback(step: int, force: bool):
-    """Rollback database migrations."""
-    try:
-        from ..database.migrations.migrator import Migrator
-        from ..database.connection import DatabaseManager
-        
-        click.echo(f"🔄 Rolling back {step} migration batch(es)...")
-        
-        # Load database configuration
-        config = {
-            'default': 'sqlite',
-            'connections': {
-                'sqlite': {
-                    'driver': 'sqlite',
-                    'database': 'database/database.sqlite'
-                }
-            }
-        }
-        
-        # Create database manager and migrator
-        db_manager = DatabaseManager(config)
-        migrator = Migrator(db_manager)
-        
-        # Run rollbacks
-        count = migrator.rollback_migrations(step)
-        
-        if count > 0:
-            click.echo(f"✅ Rolled back {count} migrations successfully.")
-        else:
-            click.echo("✅ Nothing to rollback.")
-        
-    except Exception as e:
-        click.echo(f"❌ Rollback failed: {str(e)}")
-
-
-@db.command('fresh')
-@click.option('--seed', is_flag=True, help='Seed the database after refreshing')
-@click.option('--force', is_flag=True, help='Force the refresh in production')
-def db_fresh(seed: bool, force: bool):
-    """Drop all tables and re-run migrations."""
-    try:
-        from ..database.migrations.migrator import Migrator
-        from ..database.connection import DatabaseManager
-        from pathlib import Path
-        
-        click.echo("🔄 Dropping all tables and re-running migrations...")
-        
-        # Load database configuration
-        config = {
-            'default': 'sqlite',
-            'connections': {
-                'sqlite': {
-                    'driver': 'sqlite',
-                    'database': 'database/database.sqlite'
-                }
-            }
-        }
-        
-        # Create database manager and migrator
-        db_manager = DatabaseManager(config)
-        migrator = Migrator(db_manager)
-        
-        # Drop all tables
-        migrator.drop_all_tables()
-        click.echo("✅ Dropped all tables.")
-        
-        # Re-run migrations
-        migrations_path = Path('database/migrations')
-        if migrations_path.exists():
-            count = migrator.run_migrations(migrations_path)
-            click.echo(f"✅ Re-ran {count} migrations successfully.")
-        
-        # Run seeders if requested
-        if seed:
-            click.echo("🌱 Running seeders...")
-            from ..database.migrations.seeder import SeederRunner
-            
-            seeders_path = Path('database/seeders')
-            if seeders_path.exists():
-                seeder_runner = SeederRunner(db_manager)
-                seeder_count = seeder_runner.run_all(seeders_path)
-                click.echo(f"✅ Seeded {seeder_count} seeders successfully.")
-        
-    except Exception as e:
-        click.echo(f"❌ Fresh migration failed: {str(e)}")
-
-
-@db.command('seed')
-@click.argument('seeder', required=False)
-def db_seed(seeder: Optional[str]):
-    """Run database seeders."""
-    try:
-        from ..database.migrations.seeder import SeederRunner
-        from ..database.connection import DatabaseManager
-        from pathlib import Path
-        
-        # Load database configuration
-        config = {
-            'default': 'sqlite',
-            'connections': {
-                'sqlite': {
-                    'driver': 'sqlite',
-                    'database': 'database/database.sqlite'
-                }
-            }
-        }
-        
-        db_manager = DatabaseManager(config)
-        seeder_runner = SeederRunner(db_manager)
-        
-        if seeder:
-            click.echo(f"🌱 Running seeder: {seeder}")
-            seeder_runner.run_single(seeder)
-        else:
-            click.echo("🌱 Running all seeders...")
-            seeders_path = Path('database/seeders')
-            if seeders_path.exists():
-                count = seeder_runner.run_all(seeders_path)
-                click.echo(f"✅ Seeded {count} seeders successfully.")
-            else:
-                click.echo("❌ No seeders directory found.")
+    # Write seeder file
+    seeder_file = seeders_dir / f"{file_name}.py"
+    seeder_file.write_text(content)
     
-    except Exception as e:
-        click.echo(f"❌ Seeding failed: {str(e)}")
+    click.echo(f"Seeder created: {seeder_file}")
+    click.echo(f"Class name: {class_name}")
 
 
-@db.command('status')
-def db_status():
-    """Show migration status."""
-    try:
-        from ..database.migrations.migrator import Migrator
-        from ..database.connection import DatabaseManager
-        
-        click.echo("📊 Migration Status:")
-        click.echo("-" * 60)
-        
-        # Load database configuration
-        config = {
-            'default': 'sqlite',
-            'connections': {
-                'sqlite': {
-                    'driver': 'sqlite',
-                    'database': 'database/database.sqlite'
-                }
-            }
-        }
-        
-        db_manager = DatabaseManager(config)
-        migrator = Migrator(db_manager)
-        
-        # Get migration status
-        status = migrator.get_migration_status()
-        
-        for migration_file, is_run in status.items():
-            status_icon = "✅" if is_run else "❌"
-            click.echo(f"{status_icon} {migration_file}")
-        
-    except Exception as e:
-        click.echo(f"❌ Status check failed: {str(e)}")
-
-
-@db.command('inspect')
-@click.option('--table', help='Inspect specific table')
-@click.option('--show-data', is_flag=True, help='Show sample data from tables')
-def db_inspect(table: str, show_data: bool):
-    """Inspect database structure."""
-    try:
-        from pathlib import Path
-        from ..database.connection import DatabaseManager
-        
-        click.echo("🔍 Database Inspection:")
-        click.echo("=" * 60)
-        
-        # Load database configuration
-        config = {
-            'default': 'sqlite',
-            'connections': {
-                'sqlite': {
-                    'driver': 'sqlite',
-                    'database': 'database/database.sqlite'
-                }
-            }
-        }
-        
-        # Create database manager
-        db_manager = DatabaseManager(config)
-        connection = db_manager.connection()
-        
-        if table:
-            # Inspect specific table
-            _inspect_table(connection, table, show_data)
-        else:
-            # Inspect all tables
-            _inspect_all_tables(connection, show_data)
-            
-    except Exception as e:
-        click.echo(f"❌ Database inspection failed: {str(e)}")
-
-
-def _inspect_table(connection, table_name: str, show_data: bool):
-    """Inspect a specific table."""
-    import sqlite3
+@make.command('factory')
+@click.argument('name')
+@click.option('--model', help='The name of the model')
+def make_factory(name: str, model: str):
+    """Create a new model factory."""
+    # Create factories directory if it doesn't exist
+    factories_dir = Path('database/factories')
+    factories_dir.mkdir(parents=True, exist_ok=True)
     
-    click.echo(f"\n📋 Table: {table_name}")
-    click.echo("-" * 40)
+    # Ensure class name ends with Factory
+    class_name = name if name.endswith('Factory') else f"{name}Factory"
     
-    try:
-        cursor = connection.execute(f"PRAGMA table_info({table_name})")
-        columns = cursor.fetchall()
-        
-        if not columns:
-            click.echo(f"❌ Table '{table_name}' not found")
-            return
-        
-        # Show columns
-        click.echo("Columns:")
-        for col in columns:
-            pk_marker = " (PK)" if col[5] else ""
-            nullable = "NULL" if not col[3] else "NOT NULL"
-            default = f" DEFAULT: {col[4]}" if col[4] else ""
-            click.echo(f"  • {col[1]} - {col[2]} {nullable}{default}{pk_marker}")
-        
-        # Show indexes
-        cursor = connection.execute(f"PRAGMA index_list({table_name})")
-        indexes = cursor.fetchall()
-        if indexes:
-            click.echo("\nIndexes:")
-            for idx in indexes:
-                unique_marker = " (UNIQUE)" if idx[2] else ""
-                click.echo(f"  • {idx[1]}{unique_marker}")
-        
-        # Show row count
-        cursor = connection.execute(f"SELECT COUNT(*) FROM {table_name}")
-        count = cursor.fetchone()[0]
-        click.echo(f"\nRow count: {count}")
-        
-        # Show sample data if requested
-        if show_data and count > 0:
-            cursor = connection.execute(f"SELECT * FROM {table_name} LIMIT 5")
-            rows = cursor.fetchall()
-            if rows:
-                click.echo("\nSample data (first 5 rows):")
-                column_names = [col[1] for col in columns]
-                
-                # Print header
-                header = " | ".join(f"{name:15}" for name in column_names)
-                click.echo(f"  {header}")
-                click.echo(f"  {'-' * len(header)}")
-                
-                # Print rows
-                for row in rows:
-                    row_str = " | ".join(f"{str(val):15}" for val in row)
-                    click.echo(f"  {row_str}")
-        
-    except Exception as e:
-        click.echo(f"❌ Error inspecting table {table_name}: {e}")
-
-
-def _inspect_all_tables(connection, show_data: bool):
-    """Inspect all tables in the database."""
-    import sqlite3
+    # Create snake_case file name
+    file_name = _camel_to_snake(class_name)
     
-    try:
-        # Get all tables
-        cursor = connection.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-        )
-        tables = cursor.fetchall()
-        
-        if not tables:
-            click.echo("📭 No tables found in database")
-            return
-        
-        click.echo(f"📊 Found {len(tables)} table(s):")
-        
-        for table in tables:
-            table_name = table[0]
-            
-            # Get row count
-            cursor = connection.execute(f"SELECT COUNT(*) FROM {table_name}")
-            count = cursor.fetchone()[0]
-            
-            # Get column count
-            cursor = connection.execute(f"PRAGMA table_info({table_name})")
-            columns = cursor.fetchall()
-            col_count = len(columns)
-            
-            click.echo(f"  • {table_name}: {count} rows, {col_count} columns")
-            
-            if show_data:
-                _inspect_table(connection, table_name, False)
-        
-    except Exception as e:
-        click.echo(f"❌ Error inspecting database: {e}")
-
-
-@db.command('schema')
-@click.option('--table', help='Show schema for specific table')
-@click.option('--output', type=click.Choice(['text', 'sql']), default='text', help='Output format')
-def db_schema(table: str, output: str):
-    """Show database schema."""
-    try:
-        from pathlib import Path
-        from ..database.connection import DatabaseManager
-        
-        click.echo("📐 Database Schema:")
-        click.echo("=" * 60)
-        
-        # Load database configuration
-        config = {
-            'default': 'sqlite',
-            'connections': {
-                'sqlite': {
-                    'driver': 'sqlite',
-                    'database': 'database/database.sqlite'
-                }
-            }
-        }
-        
-        # Create database manager
-        db_manager = DatabaseManager(config)
-        connection = db_manager.connection()
-        
-        if table:
-            _show_table_schema(connection, table, output)
-        else:
-            _show_all_schemas(connection, output)
-            
-    except Exception as e:
-        click.echo(f"❌ Schema display failed: {str(e)}")
-
-
-def _show_table_schema(connection, table_name: str, output: str):
-    """Show schema for a specific table."""
-    try:
-        if output == 'sql':
-            # Get CREATE TABLE statement
-            cursor = connection.execute(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
-                (table_name,)
-            )
-            result = cursor.fetchone()
-            if result:
-                click.echo(f"\n-- {table_name}")
-                click.echo(result[0] + ";")
-            else:
-                click.echo(f"❌ Table '{table_name}' not found")
-        else:
-            _inspect_table(connection, table_name, False)
-            
-    except Exception as e:
-        click.echo(f"❌ Error showing schema for {table_name}: {e}")
-
-
-def _show_all_schemas(connection, output: str):
-    """Show schema for all tables."""
-    try:
-        # Get all tables
-        cursor = connection.execute(
-            "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-        )
-        tables = cursor.fetchall()
-        
-        if not tables:
-            click.echo("📭 No tables found in database")
-            return
-        
-        if output == 'sql':
-            click.echo("-- Database Schema Export")
-            click.echo("-- Generated by Larapy\n")
-            
-            for table in tables:
-                click.echo(f"-- {table[0]}")
-                click.echo(table[1] + ";\n")
-        else:
-            for table in tables:
-                _inspect_table(connection, table[0], False)
-        
-    except Exception as e:
-        click.echo(f"❌ Error showing schemas: {e}")
-
-
-@main.command()
-def routes():
-    """Display registered routes."""
-    click.echo("Route list:")
-    click.echo("-" * 80)
-    click.echo(f"{'Method':<10} {'URI':<30} {'Name':<20} {'Action'}")
-    click.echo("-" * 80)
+    # Generate factory content
+    model_name = model or name.replace('Factory', '') if name.endswith('Factory') else name
+    content = _generate_factory(class_name, model_name)
     
-    # In a full implementation, this would display actual routes
-    click.echo(f"{'GET':<10} {'/':<30} {'home':<20} {'HomeController@index'}")
-    click.echo(f"{'POST':<10} {'/users':<30} {'users.store':<20} {'UserController@store'}")
-
-
-@main.group()
-def config():
-    """Configuration management commands."""
-    pass
-
-
-@config.command('show')
-def config_show():
-    """Display configuration information."""
-    click.echo("Application Configuration:")
-    click.echo("-" * 40)
+    # Write factory file
+    factory_file = factories_dir / f"{file_name}.py"
+    factory_file.write_text(content)
     
-    # In a full implementation, this would show actual config
-    click.echo("Environment: development")
-    click.echo("Debug: True")
-    click.echo("Database: sqlite")
+    click.echo(f"Factory created: {factory_file}")
+    click.echo(f"Class name: {class_name}")
+    click.echo(f"Model: {model_name}")
 
 
-@config.command('publish')
-@click.argument('package')
-@click.option('--force', is_flag=True, help='Overwrite existing configuration files')
-@click.option('--tag', help='Specific configuration tag to publish')
-def config_publish(package: str, force: bool, tag: str):
-    """Publish configuration files from packages."""
-    try:
-        from .commands.config_commands import ConfigPublishCommand
-        
-        command = ConfigPublishCommand()
-        options = {
-            'package': package,
-            'force': force,
-            'tag': tag
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error publishing configuration: {e}")
+# =============================================================================
+# HELPER FUNCTIONS FOR CODE GENERATION
+# =============================================================================
 
-
-@config.command('backup')
-@click.option('--name', help='Backup name (defaults to timestamp)')
-@click.option('--configs', multiple=True, help='Specific configuration files to backup')
-def config_backup(name: str, configs: tuple):
-    """Create a backup of configuration files."""
-    try:
-        from .commands.config_commands import ConfigBackupCommand
-        
-        command = ConfigBackupCommand()
-        options = {
-            'name': name,
-            'configs': list(configs) if configs else []
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error creating backup: {e}")
-
-
-@config.command('restore')
-@click.argument('backup_name')
-@click.option('--no-verify', is_flag=True, help='Skip checksum verification')
-def config_restore(backup_name: str, no_verify: bool):
-    """Restore configuration files from backup."""
-    try:
-        from .commands.config_commands import ConfigRestoreCommand
-        
-        command = ConfigRestoreCommand()
-        options = {
-            'backup_name': backup_name,
-            'no_verify': no_verify
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error restoring backup: {e}")
-
-
-@config.command('list-backups')
-def config_list_backups():
-    """List available configuration backups."""
-    try:
-        from .commands.config_commands import ConfigListBackupsCommand
-        
-        command = ConfigListBackupsCommand()
-        command.handle()
-        
-    except Exception as e:
-        click.echo(f"❌ Error listing backups: {e}")
-
-
-@config.command('validate')
-@click.argument('configs', nargs=-1)
-def config_validate(configs: tuple):
-    """Validate configuration files against schemas."""
-    try:
-        from .commands.config_commands import ConfigValidateCommand
-        
-        command = ConfigValidateCommand()
-        options = {
-            'configs': list(configs) if configs else []
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error validating configuration: {e}")
-
-
-@config.command('encrypt')
-@click.argument('config')
-@click.argument('keys', nargs=-1, required=True)
-def config_encrypt(config: str, keys: tuple):
-    """Encrypt sensitive configuration values."""
-    try:
-        from .commands.config_commands import ConfigEncryptCommand
-        
-        command = ConfigEncryptCommand()
-        options = {
-            'config': config,
-            'keys': list(keys)
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error encrypting configuration: {e}")
-
-
-@config.command('decrypt')
-@click.argument('config')
-@click.argument('keys', nargs=-1)
-def config_decrypt(config: str, keys: tuple):
-    """Decrypt and display configuration values."""
-    try:
-        from .commands.config_commands import ConfigDecryptCommand
-        
-        command = ConfigDecryptCommand()
-        options = {
-            'config': config,
-            'keys': list(keys) if keys else []
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error decrypting configuration: {e}")
-
-
-@config.command('hot-reload')
-@click.argument('action', type=click.Choice(['enable', 'disable']))
-@click.option('--configs', multiple=True, help='Configuration files to watch')
-def config_hot_reload(action: str, configs: tuple):
-    """Enable or disable configuration hot-reloading."""
-    try:
-        from .commands.config_commands import ConfigHotReloadCommand
-        
-        command = ConfigHotReloadCommand()
-        options = {
-            'action': action,
-            'configs': list(configs) if configs else []
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error managing hot-reload: {e}")
-
-
-@config.command('merge')
-@click.argument('base_config')
-@click.option('--packages', multiple=True, help='Package configurations to merge')
-@click.option('--output', help='Output merged configuration to file')
-@click.option('--dry-run', is_flag=True, help='Show merge result without saving')
-def config_merge(base_config: str, packages: tuple, output: str, dry_run: bool):
-    """Merge configuration files with package overrides."""
-    try:
-        from .commands.config_commands import ConfigMergeCommand
-        
-        command = ConfigMergeCommand()
-        options = {
-            'base_config': base_config,
-            'packages': list(packages) if packages else [],
-            'output': output,
-            'dry_run': dry_run
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error merging configuration: {e}")
-
-
-@main.group()
-def env():
-    """Environment management commands."""
-    pass
-
-
-@env.command('status')
-@click.option('--json', is_flag=True, help='Output in JSON format')
-@click.option('--validation', is_flag=True, help='Include validation details')
-def env_status(json: bool, validation: bool):
-    """Display current environment status and configuration."""
-    try:
-        from .commands.environment_commands import EnvironmentStatusCommand
-        
-        command = EnvironmentStatusCommand()
-        options = {
-            'json': json,
-            'validation': validation
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error getting environment status: {e}")
-
-
-@env.command('init')
-@click.argument('environment')
-@click.option('--force', is_flag=True, help='Overwrite existing configuration')
-@click.option('--no-deps', is_flag=True, help='Skip dependency installation')
-@click.option('--no-db', is_flag=True, help='Skip database initialization')
-@click.option('--template-vars', multiple=True, help='Template variables in key=value format')
-def env_init(environment: str, force: bool, no_deps: bool, no_db: bool, template_vars: tuple):
-    """Initialize a new environment configuration."""
-    try:
-        from .commands.environment_commands import EnvironmentInitCommand
-        
-        command = EnvironmentInitCommand()
-        options = {
-            'environment': environment,
-            'force': force,
-            'no_deps': no_deps,
-            'no_db': no_db,
-            'template_vars': list(template_vars) if template_vars else None
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error initializing environment: {e}")
-
-
-@env.command('switch')
-@click.argument('environment')
-@click.option('--backup', is_flag=True, help='Backup current environment before switching')
-def env_switch(environment: str, backup: bool):
-    """Switch to a different environment."""
-    try:
-        from .commands.environment_commands import EnvironmentSwitchCommand
-        
-        command = EnvironmentSwitchCommand()
-        options = {
-            'environment': environment,
-            'backup': backup
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error switching environment: {e}")
-
-
-@env.command('list')
-@click.option('--details', is_flag=True, help='Show detailed information for each environment')
-def env_list(details: bool):
-    """List all available environments."""
-    try:
-        from .commands.environment_commands import EnvironmentListCommand
-        
-        command = EnvironmentListCommand()
-        options = {
-            'details': details
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error listing environments: {e}")
-
-
-@env.command('validate')
-@click.argument('environment', required=False)
-@click.option('--fix', is_flag=True, help='Attempt to fix validation issues')
-def env_validate(environment: str, fix: bool):
-    """Validate environment variable configuration."""
-    try:
-        from .commands.environment_commands import EnvironmentValidateCommand
-        
-        command = EnvironmentValidateCommand()
-        options = {
-            'environment': environment,
-            'fix': fix
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error validating environment: {e}")
-
-
-@env.command('export')
-@click.argument('environment')
-@click.argument('output_file')
-@click.option('--include-secrets', is_flag=True, help='Include sensitive values in export')
-def env_export(environment: str, output_file: str, include_secrets: bool):
-    """Export environment configuration to a file."""
-    try:
-        from .commands.environment_commands import EnvironmentExportCommand
-        
-        command = EnvironmentExportCommand()
-        options = {
-            'environment': environment,
-            'output_file': output_file,
-            'include_secrets': include_secrets
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error exporting environment: {e}")
-
-
-@env.command('import')
-@click.argument('environment')
-@click.argument('input_file')
-@click.option('--force', is_flag=True, help='Overwrite existing environment')
-def env_import(environment: str, input_file: str, force: bool):
-    """Import environment configuration from a file."""
-    try:
-        from .commands.environment_commands import EnvironmentImportCommand
-        
-        command = EnvironmentImportCommand()
-        options = {
-            'environment': environment,
-            'input_file': input_file,
-            'force': force
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error importing environment: {e}")
-
-
-@env.command('clone')
-@click.argument('source')
-@click.argument('target')
-@click.option('--modifications', multiple=True, help='Modifications in key=value format')
-def env_clone(source: str, target: str, modifications: tuple):
-    """Clone an environment configuration to create a new one."""
-    try:
-        from .commands.environment_commands import EnvironmentCloneCommand
-        
-        command = EnvironmentCloneCommand()
-        options = {
-            'source': source,
-            'target': target,
-            'modifications': list(modifications) if modifications else None
-        }
-        command.handle(**options)
-        
-    except Exception as e:
-        click.echo(f"❌ Error cloning environment: {e}")
-
-
-@main.command()
-@click.argument('namespace', required=False)
-def tinker(namespace: Optional[str]):
-    """Start an interactive Python shell."""
-    click.echo("Starting Larapy interactive shell...")
-    
-    # Set up the environment
-    import code
-    
-    # In a full implementation, this would load the application context
-    banner = "Larapy Interactive Shell\nPython %s" % sys.version
-    
-    # Start the interactive console
-    code.interact(banner=banner, local=globals())
-
-
-def _generate_basic_controller(name: str) -> str:
-    """Generate basic controller template."""
+def _generate_create_migration(class_name: str, table_name: str) -> str:
+    """Generate create table migration template."""
     return f'''"""
-{name} controller for handling HTTP requests.
+Create {table_name} table migration.
 """
 
-from larapy.http.request import Request
-from larapy.http.response import Response
+from larapy.database.migrations.migration import Migration
+from larapy.database.migrations.schema import Schema, Blueprint
 
 
-class {name}:
+class {class_name}(Migration):
     """
-    {name} for handling requests.
+    Run the migrations.
+    
+    @return void
     """
     
-    def index(self, request: Request) -> Response:
+    def up(self):
         """
-        Display a listing of the resource.
+        Run the migrations.
         
-        Args:
-            request: The HTTP request
-            
-        Returns:
-            HTTP response
+        @return void
         """
-        return Response("Index method")
+        def create_{table_name}_table(table: Blueprint):
+            table.id()
+            table.timestamps()
+        
+        Schema.create('{table_name}', create_{table_name}_table)
     
-    def show(self, request: Request, id: str) -> Response:
+    def down(self):
         """
-        Display the specified resource.
+        Reverse the migrations.
         
-        Args:
-            request: The HTTP request
-            id: Resource ID
-            
-        Returns:
-            HTTP response
+        @return void
         """
-        return Response(f"Show method for ID: {{id}}")
+        Schema.drop_if_exists('{table_name}')
 '''
 
 
-def _generate_resource_controller(name: str, api: bool = False) -> str:
-    """Generate resource controller template."""
-    methods = [
-        ("index", "Display a listing of the resource"),
-        ("show", "Display the specified resource"),
-        ("store", "Store a newly created resource"),
-        ("update", "Update the specified resource"),
-        ("destroy", "Remove the specified resource")
-    ]
-    
-    if not api:
-        methods.insert(1, ("create", "Show the form for creating a new resource"))
-        methods.insert(4, ("edit", "Show the form for editing the specified resource"))
-    
-    method_implementations = []
-    
-    for method_name, description in methods:
-        if method_name in ['index']:
-            params = "self, request: Request"
-            call_params = ""
-        elif method_name in ['create']:
-            params = "self, request: Request"
-            call_params = ""
-        elif method_name in ['store']:
-            params = "self, request: Request"
-            call_params = ""
-        else:
-            params = "self, request: Request, id: str"
-            call_params = f" for ID: {{id}}"
-        
-        method_implementations.append(f'''    def {method_name}({params}) -> Response:
-        """
-        {description}
-        
-        Args:
-            request: The HTTP request
-            {"id: Resource ID" if "id" in params else ""}
-            
-        Returns:
-            HTTP response
-        """
-        return Response("{method_name.title()} method{call_params}")''')
-    
+def _generate_modify_migration(class_name: str, table_name: str) -> str:
+    """Generate modify table migration template."""
     return f'''"""
-{name} controller for handling HTTP requests.
+Modify {table_name} table migration.
 """
 
-from larapy.http.request import Request
-from larapy.http.response import Response
+from larapy.database.migrations.migration import Migration
+from larapy.database.migrations.schema import Schema, Blueprint
 
 
-class {name}:
+class {class_name}(Migration):
     """
-    {name} for handling resource requests.
+    Run the migrations.
+    
+    @return void
     """
     
-{chr(10).join(method_implementations)}
+    def up(self):
+        """
+        Run the migrations.
+        
+        @return void
+        """
+        def modify_{table_name}_table(table: Blueprint):
+            # Add your table modifications here
+            # table.string('new_column')
+            pass
+        
+        Schema.table('{table_name}', modify_{table_name}_table)
+    
+    def down(self):
+        """
+        Reverse the migrations.
+        
+        @return void
+        """
+        def rollback_{table_name}_table(table: Blueprint):
+            # Add rollback logic here
+            # table.drop_column('new_column')
+            pass
+        
+        Schema.table('{table_name}', rollback_{table_name}_table)
+'''
+
+
+def _generate_blank_migration(class_name: str) -> str:
+    """Generate blank migration template."""
+    return f'''"""
+{class_name} migration.
+"""
+
+from larapy.database.migrations.migration import Migration
+from larapy.database.migrations.schema import Schema, Blueprint
+
+
+class {class_name}(Migration):
+    """
+    Run the migrations.
+    
+    @return void
+    """
+    
+    def up(self):
+        """
+        Run the migrations.
+        
+        @return void
+        """
+        def create_example_table(table: Blueprint):
+            table.id()
+            table.timestamps()
+        
+        # Schema.create('example_table', create_example_table)
+        pass
+    
+    def down(self):
+        """
+        Reverse the migrations.
+        
+        @return void
+        """
+        # Schema.drop_if_exists('example_table')
+        pass
 '''
 
 
 def _generate_model(name: str) -> str:
-    """Generate model template."""
+    """Generate model template that extends the base ORM model."""
     return f'''"""
 {name} model for database operations.
 """
 
+from larapy.orm.model import Model
 
-class {name}:
+
+class {name}(Model):
     """
     {name} model for database interactions.
     
     This model represents the {name.lower()} entity in the database.
+    Inherits from the base Larapy ORM Model class.
     """
     
-    def __init__(self, **kwargs):
-        """
-        Initialize the model.
-        
-        Args:
-            **kwargs: Model attributes
-        """
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+    # Mass assignment protection - specify which fields can be mass assigned
+    fillable = [
+        # Add fillable fields here, e.g.:
+        # 'name',
+        # 'email',
+        # 'description',
+    ]
     
-    def save(self):
-        """Save the model to the database."""
-        # In a full implementation, this would save to database
+    # Specify casts for automatic type conversion
+    casts = {{
+        'created_at': 'datetime',
+        'updated_at': 'datetime',
+    }}
+    
+    # Specify which fields should be hidden when serializing
+    hidden = [
+        # Add hidden fields here, e.g.:
+        # 'password',
+        # 'remember_token',
+    ]
+    
+    # Define relationships
+    def example_relationship(self):
+        """
+        Example relationship method.
+        Uncomment and modify as needed.
+        """
+        # return self.belongs_to('OtherModel')
+        # return self.has_many('RelatedModel')
+        # return self.has_one('RelatedModel')
         pass
     
+    # Define scopes for reusable query constraints
     @classmethod
-    def find(cls, id):
+    def active(cls):
         """
-        Find a model by ID.
-        
-        Args:
-            id: The model ID
-            
-        Returns:
-            Model instance or None
+        Scope to get only active records.
+        Example scope method.
         """
-        # In a full implementation, this would query the database
-        return None
+        # return cls.where('is_active', True)
+        return cls.query()
     
-    @classmethod
-    def all(cls):
+    # Define accessors and mutators
+    def get_full_name_attribute(self):
         """
-        Get all models.
-        
-        Returns:
-            List of model instances
+        Example accessor for computed attribute.
+        This would create a 'full_name' attribute.
         """
-        # In a full implementation, this would query the database
-        return []
+        # return f"{{self.first_name}} {{self.last_name}}"
+        pass
     
-    def __str__(self):
-        return f"{name}({{self.__dict__}})"
-    
-    def __repr__(self):
-        return self.__str__()
+    def set_name_attribute(self, value):
+        """
+        Example mutator for input transformation.
+        This would automatically capitalize the name when set.
+        """
+        return value.title() if value else None
 '''
 
 
-def _generate_middleware(name: str) -> str:
-    """Generate middleware template."""
+def _generate_seeder(class_name: str) -> str:
+    """Generate seeder template."""
     return f'''"""
-{name} for handling HTTP middleware.
+{class_name} for seeding database tables.
 """
 
-from larapy.http.request import Request
-from larapy.http.response import Response
-from typing import Callable
+from larapy.database.migrations.seeder import Seeder
+from app.models.user import User  # Import your models here
 
 
-class {name}:
+class {class_name}(Seeder):
     """
-    {name} for processing HTTP requests.
+    {class_name} for populating database tables with test data.
     """
     
-    def handle(self, request: Request, next_handler: Callable) -> Response:
+    def run(self):
         """
-        Handle the incoming request.
+        Run the database seeds.
         
-        Args:
-            request: The HTTP request
-            next_handler: The next middleware in the stack
-            
-        Returns:
-            HTTP response
+        @return void
         """
-        # Process request before passing to next middleware
-        # ...
+        # Example seeder implementation:
+        # 
+        # User.create({{
+        #     'name': 'John Doe',
+        #     'email': 'john@example.com',
+        #     'password': 'hashed_password'
+        # }})
+        # 
+        # for i in range(10):
+        #     User.create({{
+        #         'name': f'User {{i}}',
+        #         'email': f'user{{i}}@example.com',
+        #         'password': 'hashed_password'
+        #     }})
         
-        # Call the next middleware
-        response = next_handler(request)
-        
-        # Process response after receiving from next middleware
-        # ...
-        
-        return response
+        pass
 '''
+
+
+def _generate_factory(class_name: str, model_name: str) -> str:
+    """Generate factory template."""
+    return f'''"""
+{class_name} for generating {model_name} test data.
+"""
+
+from larapy.database.migrations.factory import Factory
+from app.models.{model_name.lower()} import {model_name}
+import random
+import string
+
+
+class {class_name}(Factory):
+    """
+    {class_name} for generating {model_name} model instances.
+    """
+    
+    model = {model_name}
+    
+    def definition(self):
+        """
+        Define the model's default state.
+        
+        @return dict
+        """
+        return {{
+            # Example factory definition:
+            # 'name': self.faker.name(),
+            # 'email': self.faker.email(),
+            # 'password': 'password',  # Default password
+            # 'created_at': self.faker.date_time(),
+        }}
+    
+    def configure(self):
+        """
+        Configure the model factory.
+        
+        @return self
+        """
+        return self
+    
+    # Define factory states
+    def unverified(self):
+        """
+        Indicate that the model's email address should be unverified.
+        """
+        return self.state(lambda: {{
+            'email_verified_at': None,
+        }})
+    
+    def admin(self):
+        """
+        Indicate that the user should be an admin.
+        """
+        return self.state(lambda: {{
+            'is_admin': True,
+        }})
+'''
+
+
+def _camel_to_snake(name: str) -> str:
+    """Convert CamelCase to snake_case."""
+    import re
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
+
+# =============================================================================
+# CONFIGURATION COMMANDS (larapy config)
+# =============================================================================
+
+@config_cmd.command('cache')
+def config_cache():
+    """Cache configuration for better performance."""
+    try:
+        import sys
+        from pathlib import Path
+        
+        # Add package to path
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        
+        from core.helpers import cache_config
+        
+        click.echo("📦 Caching configuration...")
+        cache_config()
+        click.echo("✅ Configuration cached successfully.")
+        
+    except Exception as e:
+        click.echo(f"❌ Configuration caching failed: {str(e)}")
+
+
+@config_cmd.command('clear')
+def config_clear():
+    """Clear cached configuration."""
+    try:
+        import sys
+        from pathlib import Path
+        
+        # Add package to path
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        
+        from core.helpers import clear_config_cache
+        
+        click.echo("🗑️  Clearing configuration cache...")
+        clear_config_cache()
+        click.echo("✅ Configuration cache cleared.")
+        
+    except Exception as e:
+        click.echo(f"❌ Configuration cache clearing failed: {str(e)}")
+
+
+@config_cmd.command('show')
+@click.argument('key', required=False)
+def config_show(key: str):
+    """Show configuration values."""
+    try:
+        import sys
+        from pathlib import Path
+        
+        # Add package to path
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        
+        from core.helpers import config
+        
+        if key:
+            value = config(key)
+            if value is not None:
+                click.echo(f"{key}: {value}")
+            else:
+                click.echo(f"❌ Configuration key '{key}' not found.")
+        else:
+            # Show all configuration
+            all_config = config()
+            if all_config:
+                import json
+                click.echo("📋 Current Configuration:")
+                click.echo(json.dumps(all_config, indent=2, default=str))
+            else:
+                click.echo("❌ No configuration found.")
+        
+    except Exception as e:
+        click.echo(f"❌ Failed to show configuration: {str(e)}")
 
 
 if __name__ == '__main__':

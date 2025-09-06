@@ -305,81 +305,117 @@ class MigrationGenerator(BaseGenerator):
     def _load_templates(self):
         """Load migration templates."""
         self.templates['create_migration'] = '''"""
-Create {{table_name}} Table Migration
-
-This migration creates the {{table_name}} table.
+Create {{table_name}} table migration.
 """
 
 from larapy.database.migrations.migration import Migration
-from larapy.database.schema.blueprint import Blueprint
-from larapy.database.schema.schema import Schema
+from larapy.database.migrations.schema import Schema, Blueprint
 
 
 class {{class_name}}(Migration):
-    """Create {{table_name}} table migration."""
+    """
+    Run the migrations.
+    
+    @return void
+    """
     
     def up(self):
-        """Run the migration."""
-        def create_table(table: Blueprint):
+        """
+        Run the migrations.
+        
+        @return void
+        """
+        def create_{{table_name}}_table(table: Blueprint):
 {{fields}}{{indexes}}{{foreign_keys}}
         
-        Schema.create('{{table_name}}', create_table)
+        Schema.create('{{table_name}}', create_{{table_name}}_table)
     
     def down(self):
-        """Reverse the migration."""
+        """
+        Reverse the migrations.
+        
+        @return void
+        """
         Schema.drop_if_exists('{{table_name}}')
 '''
 
         self.templates['table_migration'] = '''"""
-{{class_name}} Migration
-
-This migration modifies the {{table_name}} table.
+{{class_name}} migration.
 """
 
 from larapy.database.migrations.migration import Migration
-from larapy.database.schema.blueprint import Blueprint
-from larapy.database.schema.schema import Schema
+from larapy.database.migrations.schema import Schema, Blueprint
 
 
 class {{class_name}}(Migration):
-    """{{class_name}} table migration."""
+    """
+    Run the migrations.
+    
+    @return void
+    """
     
     def up(self):
-        """Run the migration."""
-        def modify_table(table: Blueprint):
+        """
+        Run the migrations.
+        
+        @return void
+        """
+        def modify_{{table_name}}_table(table: Blueprint):
 {{up_operations}}
         
-        Schema.table('{{table_name}}', modify_table)
+        Schema.table('{{table_name}}', modify_{{table_name}}_table)
     
     def down(self):
-        """Reverse the migration."""
-        def reverse_table(table: Blueprint):
+        """
+        Reverse the migrations.
+        
+        @return void
+        """
+        def reverse_{{table_name}}_table(table: Blueprint):
 {{down_operations}}
         
-        Schema.table('{{table_name}}', reverse_table)
+        Schema.table('{{table_name}}', reverse_{{table_name}}_table)
 '''
 
         self.templates['blank_migration'] = '''"""
-{{class_name}} Migration
-
-{{description}}
+{{class_name}} migration.
 """
 
 from larapy.database.migrations.migration import Migration
-from larapy.database.schema.blueprint import Blueprint
-from larapy.database.schema.schema import Schema
+from larapy.database.migrations.schema import Schema, Blueprint
 
 
 class {{class_name}}(Migration):
-    """{{class_name}} migration."""
+    """
+    Run the migrations.
+    
+    @return void
+    """
     
     def up(self):
-        """Run the migration."""
+        """
+        Run the migrations.
+        
+        @return void
+        """
         # Add your migration logic here
+        # Example:
+        # def create_example_table(table: Blueprint):
+        #     table.id()
+        #     table.string('name')
+        #     table.timestamps()
+        # 
+        # Schema.create('example', create_example_table)
         pass
     
     def down(self):
-        """Reverse the migration."""
+        """
+        Reverse the migrations.
+        
+        @return void
+        """
         # Add your rollback logic here
+        # Example:
+        # Schema.drop_if_exists('example')
         pass
 '''

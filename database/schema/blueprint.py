@@ -22,43 +22,43 @@ class Column:
     def __init__(self, name: str, column_type: Any, **kwargs):
         self.name = name
         self.type = column_type
-        self.nullable = kwargs.get('nullable', True)
-        self.primary_key = kwargs.get('primary_key', False)
-        self.unique = kwargs.get('unique', False)
-        self.default = kwargs.get('default')
-        self.autoincrement = kwargs.get('autoincrement', False)
+        self.is_nullable = kwargs.get('nullable', True)
+        self.is_primary_key = kwargs.get('primary_key', False)
+        self.is_unique = kwargs.get('unique', False)
+        self.default_value = kwargs.get('default')
+        self.is_autoincrement = kwargs.get('autoincrement', False)
         self.foreign_key = kwargs.get('foreign_key')
-        self.comment = kwargs.get('comment')
+        self.comment_text = kwargs.get('comment')
         
     def nullable(self) -> 'Column':
         """Mark the column as nullable."""
-        self.nullable = True
+        self.is_nullable = True
         return self
         
     def not_nullable(self) -> 'Column':
         """Mark the column as not nullable."""
-        self.nullable = False
+        self.is_nullable = False
         return self
     
     def unique(self) -> 'Column':
         """Mark the column as unique."""
-        self.unique = True
+        self.is_unique = True
         return self
         
     def primary(self) -> 'Column':
         """Mark the column as primary key."""
-        self.primary_key = True
-        self.nullable = False
+        self.is_primary_key = True
+        self.is_nullable = False
         return self
         
     def default(self, value: Any) -> 'Column':
         """Set the default value for the column."""
-        self.default = value
+        self.default_value = value
         return self
         
     def comment(self, text: str) -> 'Column':
         """Add a comment to the column."""
-        self.comment = text
+        self.comment_text = text
         return self
         
     def references(self, table_column: str) -> 'Column':
@@ -69,20 +69,20 @@ class Column:
     def to_sqlalchemy_column(self) -> SQLColumn:
         """Convert to SQLAlchemy column."""
         kwargs = {
-            'nullable': self.nullable,
-            'primary_key': self.primary_key,
-            'unique': self.unique,
-            'autoincrement': self.autoincrement
+            'nullable': self.is_nullable,
+            'primary_key': self.is_primary_key,
+            'unique': self.is_unique,
+            'autoincrement': self.is_autoincrement
         }
         
-        if self.default is not None:
-            kwargs['default'] = self.default
+        if self.default_value is not None:
+            kwargs['default'] = self.default_value
             
         if self.foreign_key:
             kwargs['foreign_key'] = ForeignKey(self.foreign_key)
             
-        if self.comment:
-            kwargs['comment'] = self.comment
+        if self.comment_text:
+            kwargs['comment'] = self.comment_text
             
         return SQLColumn(self.name, self.type, **kwargs)
 

@@ -7,7 +7,7 @@ will extend to define schema changes.
 
 from abc import ABC, abstractmethod
 from typing import Callable, Optional
-from ..schema import Schema, Blueprint
+from .schema import Schema, Blueprint
 
 
 class Migration(ABC):
@@ -17,12 +17,12 @@ class Migration(ABC):
         self.connection: Optional[str] = None
         
     @abstractmethod
-    async def up(self) -> None:
+    def up(self) -> None:
         """Run the migration."""
         pass
         
     @abstractmethod
-    async def down(self) -> None:
+    def down(self) -> None:
         """Reverse the migration."""
         pass
         
@@ -63,11 +63,11 @@ class CreateMigration(Migration):
         super().__init__()
         self.table_name = table_name
         
-    async def up(self) -> None:
+    def up(self) -> None:
         """Create the table."""
         self.create(self.table_name, self.define_table)
         
-    async def down(self) -> None:
+    def down(self) -> None:
         """Drop the table."""
         self.drop(self.table_name)
         
@@ -84,7 +84,7 @@ class ModifyMigration(Migration):
         super().__init__()
         self.table_name = table_name
         
-    async def up(self) -> None:
+    def up(self) -> None:
         """Modify the table."""
         self.table(self.table_name, self.modify_table)
         
@@ -94,6 +94,6 @@ class ModifyMigration(Migration):
         pass
         
     @abstractmethod
-    async def down(self) -> None:
+    def down(self) -> None:
         """Reverse the modifications."""
         pass

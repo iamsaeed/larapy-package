@@ -8,9 +8,10 @@ with test or initial data.
 import importlib
 import importlib.util
 import os
+from pathlib import Path
 from typing import Dict, List, Optional, Type, Any
 from abc import ABC, abstractmethod
-from ..connection import DatabaseManager
+# Note: DatabaseManager import removed - use direct SQLite connections
 
 
 class Seeder(ABC):
@@ -44,8 +45,7 @@ class DatabaseSeeder(Seeder):
 class SeederRunner:
     """Handles running database seeders."""
     
-    def __init__(self, db_manager: DatabaseManager, seeders_path: str):
-        self.db_manager = db_manager
+    def __init__(self, seeders_path: str):
         self.seeders_path = seeders_path
         
     async def run(self, seeder_class: Optional[str] = None, 

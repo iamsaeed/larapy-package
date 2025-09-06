@@ -5,6 +5,7 @@ This module provides the main Schema class for creating, modifying, and dropping
 database tables with a fluent Laravel-like API.
 """
 
+import asyncio
 from typing import Callable, Optional, Dict, Any
 from sqlalchemy import MetaData, Table
 from sqlalchemy.schema import CreateTable, DropTable
